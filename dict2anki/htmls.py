@@ -1,5 +1,5 @@
 import re
-from typing import Optional, Iterator, Tuple
+from typing import Optional, Iterator, Tuple, Callable
 
 from .utils import get_tag, Log
 
@@ -10,25 +10,28 @@ __all__ = [
 TAG = get_tag(__name__)
 
 
-def find_positions(html_str: str, tag: str, attrib: str = '', hook=None) -> Iterator[Tuple[int, int]]:
-    open_tag = re.compile(r'<{}(?:\s*?|\s[\s\S]*?)>'.format(tag))
-    close_tag = re.compile(r'</{}\s*?>'.format(tag))
-    all_tag = re.compile(r'</?{}\s*?>|<{}\s[\s\S]*?>'.format(tag, tag))
+def find_positions(html_str: str, tag: str, attrib: str = '', hook: Optional[Callable[[int, int], None]] = None) -> Iterator[Tuple[int, int]]:
+    open_tag = re.compile(rf'<{tag}(?:\s*?|\s[\s\S]*?)>')
+    close_tag = re.compile(rf'</{tag}\s*?>')
+    all_tag = re.compile(rf'</?{tag}\s*?>|<{tag}\s[\s\S]*?>')
     # must match with open_tag first
-    start_tag = re.compile(r'<{}[\s\S]*?{}[\s\S]*?>'.format(tag, attrib))
+    start_tag = re.compile(rf'<{tag}[\s\S]*?{attrib}[\s\S]*?>')
+    
     count = 0
     start = -1
+    
     for m in all_tag.finditer(html_str):
-        if open_tag.fullmatch(m.group(0)):
+        token = m.group(0)
+        if open_tag.fullmatch(token):
             if start != -1:
                 count += 1
-            elif start_tag.match(m.group(0)):
+            elif start_tag.match(token):
                 count = 1
                 start = m.start()
-        elif start != -1 and close_tag.fullmatch(m.group(0)):
+        elif start != -1 and close_tag.fullmatch(token):
             count -= 1
             if count == 0:
-                Log.d(TAG, 'paired tags found, start={}, end={}'.format(start, m.end()))
+                Log.d(TAG, f"paired tags found, start={start}, end={m.end()}")
                 if hook:
                     hook(start, m.end())
                 yield start, m.end()
@@ -41,18 +44,16 @@ def findall(html_str: str, tag: str, attrib: str = '') -> Iterator[str]:
 
 
 def find(html_str: str, tag: str, attrib: str = '') -> Optional[str]:
-    for e in findall(html_str, tag, attrib):
-        return e
+    return next(findall(html_str, tag, attrib), None)
 
 
-def sub(html_str: str, replace, tag: str, attrib: str = ''):
-    positions = []
-    for i, j in find_positions(html_str, tag, attrib):
-        positions.append((i, j))
-    while positions:
-        i, j = positions.pop()
-        Log.d(TAG, 'replacing element: {}'.format(html_str[i:j]))
-        html_str = html_str[:i] + replace(html_str[i:j]) + html_str[j:]
+def sub(html_str: str, replace: Callable[[str], str], tag: str, attrib: str = '') -> str:
+    positions = list(find_positions(html_str, tag, attrib))
+    
+    for i, j in reversed(positions):
+        segment = html_str[i:j]
+        Log.d(TAG, f"replacing element: {segment}")
+        html_str = html_str[:i] + replace(segment) + html_str[j:]
     return html_str
 
 

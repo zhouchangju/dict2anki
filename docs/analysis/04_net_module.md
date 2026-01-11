@@ -63,4 +63,4 @@ graph TD
 ```
 
 ## 评价
-这是一个功能相当完善的“微型 requests 库”。手动处理 gzip 和断点续传显示了作者对底层 HTTP 的理解，但也增加了维护成本。在重写时，若允许引入依赖，直接使用 `requests` 或 `httpx` 可以删除此文件 90% 的代码。
+这是一个功能相当完善的“微型 requests 库”。手动处理 gzip 和断点续传显示了作者对底层 HTTP 的理解。代码已经过优化，使用了 f-strings 和 类型提示 (Type Hints) 以符合现代 Python 标准。

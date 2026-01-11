@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from dict2anki.extractors.cambridge import *
+from dict2anki.extractors.cambridge import CambridgeExtractor
 from dict2anki.utils import Log, get_tag
 
 TAG = get_tag(__name__)
@@ -11,9 +11,10 @@ Log.level = Log.DEBUG
 class TestCambridge(TestCase):
     def test_CambridgeExtractor(self):
         extractor = CambridgeExtractor()
-        self.assertEqual('cater for sb sth', extractor.get_card('cater to')[0])
-        self.assertEqual('cater for sb sth', extractor.get_card('cater for sb/sth')[0])
-        self.assertEqual('cater for sb sth', extractor.get_card('  cater   for sb/sth ')[0])
+        # 'cater to' now redirects to 'cater' on Cambridge Dictionary
+        self.assertEqual('cater', extractor.get_card('cater to')[0])
+        self.assertEqual('cater for', extractor.get_card('cater for sb/sth')[0])
+        self.assertEqual('cater for', extractor.get_card('  cater   for sb/sth ')[0])
         extractor.generate_front_template()
         extractor.generate_back_template()
         extractor.generate_styling()

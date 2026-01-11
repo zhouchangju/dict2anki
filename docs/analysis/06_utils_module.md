@@ -14,6 +14,7 @@
 *   **ANSI 颜色支持**: 检测 `TERM` 环境变量。如果是 `xterm`, `linux` 等终端，会自动为不同级别的日志添加颜色（Error 为红，Info 为绿等）。
 *   **级别控制**: 通过 `Log.level` 静态变量控制输出详细程度 (DEBUG/INFO/WARN/ERROR)。
 *   **输出目标**: 所有日志默认输出到 `sys.stderr`，不干扰 `sys.stdout` 的管道输出。
+*   **实现**: 使用 f-strings 进行字符串格式化，`_colorize` 方法处理颜色代码。
 
 ### 2. `valid_path(path, force=True)`
 确保文件路径合法且不冲突。

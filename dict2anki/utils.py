@@ -1,7 +1,7 @@
 import os
 import re
 import sys
-from typing import Callable
+from typing import Callable, Optional
 
 __all__ = [
     'Log',
@@ -26,90 +26,82 @@ class Log:
     level = INFO
 
     _TERM = os.getenv('TERM', '')
-    _ANSI_TERMINAL = _TERM.startswith('xterm') or _TERM in ('eterm-color', 'linux', 'screen', 'vt100',)
+    _ANSI_TERMINAL = _TERM.startswith('xterm') or _TERM in ('eterm-color', 'linux', 'screen', 'vt100')
 
-    # https://en.wikipedia.org/wiki/ANSI_escape_code
     _RESET = '0'
-    _BOLD = '1'
-    _FAINT = '2'
-    _ITALIC = '3'
-    _UNDERLINE = '4'
-    _BLINK = '5'
-    _REVERSE = '7'
     _RED = '31'
     _GREEN = '32'
     _YELLOW = '33'
-    _BLUE = '34'
-    _RED_BG = '41'
-    _GREEN_BG = '42'
-    _YELLOW_BG = '43'
-    _BLUE_BG = '44'
 
     @staticmethod
-    def _sgr_text(msg, *attributes) -> str:
-        return '\33[{}m{}\33[{}m'.format(';'.join([color for color in attributes]), msg, Log._RESET)
+    def _colorize(msg: str, *colors: str) -> str:
+        if Log._ANSI_TERMINAL:
+            return f"\033[{';'.join(colors)}m{msg}\033[{Log._RESET}m"
+        return msg
 
     @staticmethod
-    def _pure_text(msg, *attributes) -> str:
-        return str(msg)
-
-    _text = _sgr_text if _ANSI_TERMINAL else _pure_text
+    def _print(msg: str, *colors: str):
+        sys.stderr.write(Log._colorize(f"{msg}\n", *colors))
 
     @staticmethod
-    def _print(msg, *attributes):
-        sys.stderr.write(Log._text('{}\n'.format(msg), *attributes))
-
-    _MSG = '{:<10}: {}'
-
-    @staticmethod
-    def d(tag, msg):
+    def d(tag: str, msg: str):
         if Log.level <= Log.DEBUG:
-            Log._print('D/' + Log._MSG.format(tag, msg))
+            Log._print(f"D/{tag:<10}: {msg}")
 
     @staticmethod
-    def i(tag, msg):
+    def i(tag: str, msg: str):
         if Log.level <= Log.INFO:
-            Log._print('I/' + Log._MSG.format(tag, msg), Log._GREEN)
+            Log._print(f"I/{tag:<10}: {msg}", Log._GREEN)
 
     @staticmethod
-    def w(tag, msg):
+    def w(tag: str, msg: str):
         if Log.level <= Log.WARN:
-            Log._print('W/' + Log._MSG.format(tag, msg), Log._YELLOW)
+            Log._print(f"W/{tag:<10}: {msg}", Log._YELLOW)
 
     @staticmethod
-    def e(tag, msg):
+    def e(tag: str, msg: str):
         if Log.level <= Log.ERROR:
-            Log._print('E/' + Log._MSG.format(tag, msg), Log._RED)
+            Log._print(f"E/{tag:<10}: {msg}", Log._RED)
 
 
 def valid_path(path: str, force: bool = True) -> str:
-    Log.d(TAG, 'valid path, path={}, force={}'.format(path, force))
+    Log.d(TAG, f"valid path, path={path}, force={force}")
     dir_name, base_name = os.path.split(path)
-    if not os.path.exists(dir_name):
+    if dir_name:
         os.makedirs(dir_name, exist_ok=True)
+    
     base_name = re.sub(r'[/:*?"<>|]', '_', base_name)
     path = os.path.join(dir_name, base_name)
+    
     if force:
         return path
+
     while os.path.exists(path):
         name, ext = os.path.splitext(base_name)
-        # '.txt' -> ('.txt', '')
-        # which doesn't make sense
+        # Handle case where file starts with dot (e.g. .gitignore) which splitext handles as name='.gitignore', ext=''
+        # Original logic swapped them if ext was empty, presumably for files like 'README' vs '.config'? 
+        # Actually standard splitext on 'README' is ('README', ''). 
+        # The original code's intention with `if not ext` swap seems specific to dot-prefixed files or no-extension files.
+        # Let's preserve the original behavior's outcome but clean the regex.
         if not ext:
             name, ext = ext, name
-        m = re.search(r'_\(([1-9]\d*)\)$', name)
-        if not m:
+            
+        match = re.search(r'_\(([1-9]\d*)\)$', name)
+        if not match:
             name += '_(1)'
         else:
-            name = re.sub(r'\(([1-9]\d*)\)$', '(' + str(int(m.group(1)) + 1) + ')', name)
+            new_idx = int(match.group(1)) + 1
+            name = name[:match.start()] + f'_({new_idx})'
+            
         base_name = name + ext
         path = os.path.join(dir_name, base_name)
-    Log.d(TAG, 'valid path, path={}'.format(path))
+
+    Log.d(TAG, f"valid path, path={path}")
     return path
 
 
 class ProgressBar:
-    def __init__(self, total: int = 100, progress: int = 0, detail: Callable[[int], str] = None, extra: str = None):
+    def __init__(self, total: int = 100, progress: int = 0, detail: Optional[Callable[[int], str]] = None, extra: str = None):
         self._total = total
         self._progress = progress
         self._detail = detail
@@ -122,8 +114,8 @@ class ProgressBar:
         return self._total
 
     @total.setter
-    def total(self, total: int):
-        self._total = total
+    def total(self, value: int):
+        self._total = value
         self.update()
 
     @property
@@ -131,8 +123,8 @@ class ProgressBar:
         return self._progress
 
     @progress.setter
-    def progress(self, progress: int):
-        self._progress = progress
+    def progress(self, value: int):
+        self._progress = value
         self.update()
 
     @property
@@ -140,23 +132,21 @@ class ProgressBar:
         return self._extra
 
     @extra.setter
-    def extra(self, extra: str):
-        self._extra = extra
+    def extra(self, value: str):
+        self._extra = value
         self.update()
 
     def update(self):
-        if not self._show:
-            self._show = True
-        percentage = round(self._progress * 100 / self._total, 1)
-        if percentage >= 100:
-            percentage = 100
+        self._show = True
+        percentage = round(self._progress * 100 / self._total, 1) if self._total > 0 else 0
+        percentage = min(percentage, 100)
         bar_count = int(percentage) // 4
-        if self._detail:
-            progress, total = self._detail(self._progress), self._detail(self._total)
-        else:
-            progress, total = self._progress, self._total
-        extra = '' if self._extra is None else self._extra
-        line = self._formation.format(percentage, '█' * bar_count, progress, total, extra)
+        
+        prog_str = self._detail(self._progress) if self._detail else str(self._progress)
+        total_str = self._detail(self._total) if self._detail else str(self._total)
+        extra_str = self._extra if self._extra is not None else ''
+        
+        line = self._formation.format(percentage, '█' * bar_count, prog_str, total_str, extra_str)
         sys.stdout.write('\r' + line)
         sys.stdout.flush()
 

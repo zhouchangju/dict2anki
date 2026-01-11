@@ -60,73 +60,69 @@ class CardExtractor(metaclass=ABCMeta):
         self._back_template = DEFAULT_BACK_TEMPLATE
         self._styling = DEFAULT_STYLING
 
+    def _write_template(self, desc: str, path: str, content: str):
+        Log.i(TAG, f"generating {desc}")
+        file_path = valid_path(path)
+        with open(file_path, 'w', encoding='utf8') as fp:
+            fp.write(content)
+        Log.i(TAG, f"generated {desc} to: {file_path}")
+
     def generate_front_template(self):
-        Log.i(TAG, 'generating front template')
-        ftf = valid_path(self.front_template_file)
-        with open(ftf, 'w', encoding='utf8') as fp:
-            fp.write(self._front_template)
-        Log.i(TAG, 'generated front template to: {}'.format(ftf))
+        self._write_template('front template', self.front_template_file, self._front_template)
 
     def generate_back_template(self):
-        Log.i(TAG, 'generating back template')
-        btf = valid_path(self.back_template_file)
-        with open(btf, 'w', encoding='utf8') as fp:
-            fp.write(self._back_template)
-        Log.i(TAG, 'generated back template to: {}'.format(btf))
+        self._write_template('back template', self.back_template_file, self._back_template)
 
     def generate_styling(self):
-        Log.i(TAG, 'generating styling')
-        sf = valid_path(self.styling_file)
-        with open(sf, 'w', encoding='utf8') as fp:
-            fp.write(self._styling)
-        Log.i(TAG, 'generated styling to: {}'.format(sf))
+        self._write_template('styling', self.styling_file, self._styling)
 
     def generate_cards(self, *words: str):
-        Log.i(TAG, 'generating {} cards'.format(len(words)))
-        file = valid_path(self.cards_file)
+        Log.i(TAG, f"generating {len(words)} cards")
+        file_path = valid_path(self.cards_file)
 
-        # region Access with lock in coroutines
         visited = set()
         skipped = []
         bar = ProgressBar(len(words))
-        lock = asyncio.Lock()
+        
+        async def process_word(sem: asyncio.Semaphore, word: str) -> List[str]:
+            async with sem:
+                try:
+                    # Run blocking get_card in thread pool
+                    loop = asyncio.get_running_loop()
+                    actual, fields = await loop.run_in_executor(None, self.get_card, word)
+                except Exception as e:
+                    Log.e(TAG, f"can't get card: \"{word}\", {e}")
+                    skipped.append(word)
+                    Log.e(TAG, f"skipped: \"{word}\"")
+                    return None
+                
+                # Update progress bar
+                bar.extra = actual
+                bar.increment()
 
-        # endregion
+                if actual not in visited:
+                    visited.add(word)
+                    visited.add(actual)
+                    return fields
+            return None
 
-        async def do_generate():
+        async def run_tasks():
             sem = asyncio.Semaphore(DEFAULT_CONCURRENCY)
-
-            async def do_get(word: str) -> List[str]:
-                async with sem:
-                    try:
-                        actual, fields = await asyncio.get_running_loop().run_in_executor(None, self.get_card, word)
-                    except Exception as e:
-                        Log.e(TAG, 'can\'t get card: "{}", {}'.format(word, e))
-                        async with lock:
-                            skipped.append(word)
-                        Log.e(TAG, 'skipped: "{}"'.format(word))
-                    else:
-                        async with lock:
-                            bar.extra = actual
-                            bar.increment()
-                            if actual not in visited:
-                                visited.add(word)
-                                visited.add(actual)
-                                return fields
-
-            # gather all tasks to keep results stable
-            return await asyncio.gather(*[do_get(w) for w in words])
+            tasks = [process_word(sem, w) for w in words]
+            return await asyncio.gather(*tasks)
 
         bar.update()
-        cards = asyncio.run(do_generate())
-        cards = [card for card in cards if card]
+        results = asyncio.run(run_tasks())
+        cards = [res for res in results if res]
         bar.done()
-        with open(file, 'a', encoding='utf8') as fp:
+        
+        with open(file_path, 'a', encoding='utf8') as fp:
             writer = csv.writer(fp)
             writer.writerows(cards)
-        Log.i(TAG, 'generated {} cards to: {}'.format(len(cards), file))
+            
+        Log.i(TAG, f"generated {len(cards)} cards to: {file_path}")
         if skipped:
-            Log.e(TAG, 'skipped {} words:\n{}'.format(len(skipped), '\n'.join(skipped)))
+            Log.e(TAG, f"skipped {len(skipped)} words:\n" + "\n".join(skipped))
 
     @abstractmethod
     def get_card(self, word: str) -> Tuple[str, List[str]]:

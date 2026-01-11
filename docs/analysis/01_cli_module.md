@@ -37,23 +37,23 @@ if __name__ == '__main__':
 
 ```python
 def main():
-    parse_args() # 1. 解析参数
+    # 1. 解析参数，返回配置和数据，不依赖全局变量
+    extractor_name, output_path, words = parse_args()
     
     # 2. 设置网络超时
     socket.setdefaulttimeout(DEFAULT_TIME_OUT)
 
     # 3. 实例化提取器 (工厂模式)
-    # EXTRACTORS 是一个字典，映射名称到类
-    e = EXTRACTORS[extractor](output_path)
+    extractor_class = EXTRACTORS[extractor_name]
+    extractor = extractor_class(output_path)
     
     # 4. 生成 Anki 必要的模板文件
-    e.generate_front_template()
-    e.generate_back_template()
-    e.generate_styling()
+    extractor.generate_front_template()
+    extractor.generate_back_template()
+    extractor.generate_styling()
     
     # 5. 开始批量生成卡片
-    # *words 解包列表作为参数传递
-    e.generate_cards(*words)
+    extractor.generate_cards(*words)
 ```
 
 ### 4. 输入处理
@@ -62,11 +62,12 @@ def main():
 *   去除首尾空格。
 *   忽略空行。
 *   **忽略以 `#` 开头的注释行**。
+*   使用上下文管理器 (`with`) 安全打开和关闭文件。
 
 ## 依赖关系
-*   **Imports**: `argparse`, `os`, `socket`, `sys`
+*   **Imports**: `argparse`, `os`, `socket`, `typing`
 *   **Internal**: `extractors` (获取提取器列表), `utils` (日志)
 
-## 改进建议 (用于重写)
-*   目前 `words` 加载逻辑耦合在 `parse_args` 中，建议分离为独立的 `load_words` 函数。
-*   全局变量 (`extractor`, `output_path`, `words`) 使用较多，建议封装进一个 `Config` 对象或 `Context` 类传递。
+## 改进建议 (已实施)
+*   `words` 加载逻辑集成在 `parse_args` 中，并返回给 `main`。
+*   全局变量 (`extractor`, `output_path`, `words`) 已被移除，改为通过函数返回值传递。
