@@ -73,6 +73,7 @@ class CambridgeExtractor(CardExtractor):
         Log.i(TAG, 'saved font file to: {}'.format(_font))
         _font = os.path.basename(_font)
         style = re.sub(r'url\([\S]*?/{}'.format(font), 'url({}'.format(_font), style)
+        style += '.large-ipa { font-size: 24px; color: #333; margin: 10px 0; display: block; }'
         style = '<style>{}</style>\n'.format(style)
         style += '<script type="text/javascript">{}</script>\n'.format(
             url_get_content(URL_AMP, fake_headers()).replace('\n', ' ')
@@ -107,6 +108,21 @@ class CambridgeExtractor(CardExtractor):
         try:
             back = htmls.find(html_str, 'div', 'class="di-body"')
             front = htmls.find(back, 'div', 'class="di-title"')
+
+            ipa = htmls.find(back, 'span', 'class="ipa"')
+            if ipa:
+                front += '<div class="large-ipa">/{}/</div>'.format(ipa)
+
+            audio_matches = re.findall(r'src="(/zhs/media[^"]+)"', back)
+            if audio_matches:
+                selected_audio = audio_matches[0]
+                for audio in audio_matches:
+                    if 'us_pron' in audio:
+                        selected_audio = audio
+                        break
+
+                audio_url = URL_ROOT + selected_audio.lstrip('/')
+                front += '<audio src="{}" autoplay controls></audio>'.format(audio_url)
 
             # remove titles
             back = htmls.removeall(back, 'div', 'class="di-title"')

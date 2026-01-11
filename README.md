@@ -80,7 +80,7 @@ $ python3 -m dict2anki -i /path/to/list.txt
 
 #### 2. 复制媒体文件
 
-将 `collection.media` 文件夹中的内容（如果有的话），复制到 [Anki 文件夹](https://docs.ankiweb.net/files.html#file-locations) 对应用户的 `collection.media` 文件夹下。
+将 `collection.media` 文件夹中的内容（如果有的话），复制到 [Anki 文件夹](https://docs.ankiweb.net/files.html#file-locations)(我的Mac是~/Users/leozhou~/Library/Application Support/Anki2/User 1/collection.media这个目录) 对应用户的 `collection.media` 文件夹下。
 
 #### 3. 导入卡片
 
